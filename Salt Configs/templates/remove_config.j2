@@ -1,0 +1,97 @@
+{%- set device_os = grains.get('os', '') %} 
+
+{%- if device_os == 'junos' %}  
+delete protocols ospf
+delete protocols bgp
+delete interfaces lo0
+delete routing-options
+delete policy-options
+delete system host-name
+delete system login message
+
+{%- elif device_os == 'ios' %}
+no router bgp {{ pillar['bgp_config']['local_as'] }}
+no router ospf 1
+no hostname
+no banner motd
+no interface loopback 0
+no interface loopback 1
+interface GigabitEthernet0/2
+no mtu
+
+{# Remove static routes if there are EBGP neighbors #}  
+{% if pillar['bgp_config']['neighbors'].values() | selectattr('type', 'equalto', 'external') | list %}  
+no ip route *  
+{% endif %}  
+
+{# Remove RR configurations if the router is an RR client #}  
+{% if pillar['bgp_config'].get('rr_client') %}  
+no ip prefix-list FILTER_LOOPBACKS  
+no route-map OUTBOUND_FILTER  
+{% endif %}  
+
+{# Remove WAN interfaces except GigabitEthernet0/2 #}  
+{% for interface in pillar['wan_config'] %}  
+{% if interface != 'GigabitEthernet0/2' %}  
+interface {{ interface }}  
+ no ip address  
+ no mtu  
+ no description  
+!  
+{% endif %}  
+{% endfor %}
+
+{# For GigabitEthernet0/2, only remove MTU if it was set #}  
+interface GigabitEthernet0/2  
+ no mtu  
+
+
+{# EOS CONFIG REMOVAL ARISTA #}
+{% elif device_os =='eos' %}
+
+{# Remove routing protocols #}  
+no router bgp {{ pillar['bgp_config']['local_as'] }}  
+no router ospf 1  
+
+{# Remove device identity configurations #}  
+no hostname  
+no banner login  
+
+{# Remove loopback interfaces #}  
+no interface loopback 0  
+no interface loopback 1  
+
+{# Remove static routes for EBGP neighbors #}  
+{% if pillar['bgp_config']['neighbors'].values() | selectattr('type', 'equalto', 'external') | list %}  
+  {% for neighbor in pillar['bgp_config']['neighbors'].values() if neighbor.type == 'external' %}  
+    {% if neighbor.get('ip_address') %}  
+no ip route {{ neighbor.ip_address }}/32  
+    {% endif %}  
+  {% endfor %}  
+{% endif %} 
+
+{# Remove filters and route-maps if the device is an RR client #}  
+{% if pillar['bgp_config'].get('rr_client') %}  
+no ip prefix-list FILTER_EBGP_STATIC  
+no ip prefix-list FILTER_LOOPBACKS  
+
+no route-map FILTER_EBGP_STATIC  
+no route-map OUTBOUND_FILTER  
+{% endif %}  
+
+{# Reset WAN interfaces except management interface (Ethernet2) #}  
+{% for interface in pillar['wan_config'] %}  
+{% if interface != 'Ethernet2' %}  
+interface {{ interface }}  
+   default ip address  
+   default mtu  
+   no description  
+!  
+{% endif %}  
+{% endfor %}  
+
+{# Ensure MTU is reset on management interface #}  
+interface Ethernet2  
+   default mtu  
+
+{%- endif %}

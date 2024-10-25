@@ -1,0 +1,40 @@
+{%- set device_os = grains.get('os', '') %}
+{%- set loopback_configs = pillar.get('loopback_configs', {}) %}  
+
+{%- if device_os == 'junos' %}
+interfaces {  
+    lo0 {  
+        description "Loopback Interface";  
+        unit 0 {  
+            family inet {  
+{%- for loopback_name, addresses in loopback_configs.items() %}  
+    {%- for addr in addresses %}  
+                address {{ addr.ip }}/{{ addr.mask }} {  
+    {%- if addr.get('status') == 'primary' %}  
+                    primary;  
+    {%- endif %}  
+                }  
+    {%- endfor %}  
+{%- endfor %}  
+            }  
+        }  
+    }  
+}
+
+
+{%- elif device_os == 'ios' or device_os=='eos' %}  
+    {%- for loopback_name, addresses in loopback_configs.items() %}  
+        interface {{ loopback_name }}  
+        {%- for addr in addresses %}  
+            ip address {{ addr.ip }} {{ addr.mask }}  
+            {%- if addr.get('status') != 'primary' %}  
+              description Loopback Interface 
+            {%- else %}  
+               description Primary Loopback Interface
+            {%- endif %}  
+        {%- endfor %}  
+    {%- endfor %}  
+!
+
+
+{%- endif %} 

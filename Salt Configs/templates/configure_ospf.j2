@@ -1,0 +1,43 @@
+{%- set device_os = grains.get('os', '') %}  
+{%- set ospf_config = pillar.get('ospf_config', {}) %}  
+
+
+{%- if device_os == 'junos' %}  
+protocols {  
+    ospf {  
+        area {{ ospf_config.get('area', '0.0.0.0') }} {  
+            {%- for interface in ospf_config.get('interfaces', []) %}  
+            {% if 'lo0' in interface %}
+            interface {{ interface }} {
+                passive;
+            }
+            {% else %}
+            interface {{ interface }};
+            {% endif %}
+
+            {%- endfor %}  
+        }  
+    } 
+} 
+{%- elif device_os == 'ios' %}
+router ospf 1  
+ router-id {{ ospf_config.router_id }}  
+{% for network in ospf_config.networks %}  
+ network {{ network.network }} {{ network.mask }} area {{ ospf_config.area }}  
+{% endfor %}  
+{% for interface in ospf_config.passive %}  
+ passive-interface {{ interface }}  
+{% endfor %}
+!
+
+{%- elif device_os == 'eos' %}
+router ospf 1 
+   router-id {{ ospf_config.router_id }}  
+{% for network in ospf_config.networks %}  
+   network {{ network.network }} {{ network.mask }} area {{ ospf_config.area }}  
+{% endfor %}  
+{% for interface in ospf_config.passive %}  
+   passive-interface {{ interface }}  
+{% endfor %}  
+
+{%- endif %}

@@ -1,0 +1,36 @@
+{%- set network_services = pillar.get('network_services', {}) %}  
+{%- set device_os = grains.get('os', '') %} 
+
+{%- if device_os == 'junos' %}  
+system {  
+    services {  
+        {%- if network_services.get('ssh', False) %}  
+        ssh;  
+        {%- endif %}  
+    }  
+}
+  
+{%- elif device_os == 'ios' %}
+  {% if network_services.ssh %}  
+line vty 0 4  
+ transport input ssh  
+!  
+ip ssh version 2  
+ip scp server enable
+  {% endif %}
+!
+
+{% elif device_os == 'eos' %}
+{% if network_services.ssh is defined and network_services.ssh %}  
+management ssh
+no shutdown  
+!  
+management api http-commands
+protocol http
+no shutdown
+!
+{% endif %}  
+ip routing  
+!  
+
+{%- endif %}  
