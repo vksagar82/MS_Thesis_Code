@@ -16,7 +16,7 @@ extract_ips() {
 import yaml, sys  
 
 try:  
-    with open('dst_ip.yaml', 'r') as file:  
+    with open('dst_ip.yml', 'r') as file:  
         data = yaml.safe_load(file)  
     ips = data['dest_addr']['ip_details']['dst']  
     print(' '.join(map(str, ips)))  
@@ -64,8 +64,8 @@ if [ -z "$src_ips" ] || [ -z "$dst_ips" ]; then
     echo "Destination IPs: $dst_ips"  
     echo "Raw Salt output for source IPs:"  
     salt -E "$SALT_TARGET" pillar.get 'loopback_configs' --out=json  
-    echo "Contents of dst_ip.yaml:"  
-    cat dst_ip.yaml  
+    echo "Contents of dst_ip.yml:"  
+    cat dst_ip.yml  
     exit 1  
 fi  
 
