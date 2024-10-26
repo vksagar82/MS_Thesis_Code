@@ -1,0 +1,45 @@
+# templates/configure_wan.j2 #}  
+
+{% if hostvars[inventory_hostname].os_details.network_os == 'junos' %}  
+interfaces {  
+{% if hostvars[inventory_hostname].wan_config is defined %}  
+  {% for interface, config in hostvars[inventory_hostname].wan_config.items() %}  
+    {{ interface }} {  
+        mtu {{ config.mtu | default('1500') }};  
+        unit 0 {  
+            description "{{ config.description | default('WAN interface configured by Ansible') }}";  
+            family inet {  
+                address {{ config.ip }}/{{ config.mask }};  
+            }  
+        }  
+    }  
+  {% endfor %}  
+{% endif %}  
+}  
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'ios' %}  
+{% if hostvars[inventory_hostname].wan_config is defined %}  
+  {% for interface, config in hostvars[inventory_hostname].wan_config.items() %}  
+interface {{ interface }}  
+ description {{ config.description | default('WAN interface configured by Ansible') }}  
+ ip address {{ config.ip }} {{ config.mask }}  
+ mtu {{ config.mtu | default('1500') }}  
+ no shutdown  
+!  
+  {% endfor %}  
+{% endif %}  
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'eos' %}  
+{% if hostvars[inventory_hostname].wan_config is defined %}  
+{% for interface, config in hostvars[inventory_hostname].wan_config.items() %}  
+interface {{ interface }}  
+   description {{ config.description | default('WAN interface configured by Ansible') }}  
+   mtu {{ config.mtu | default('1500') }}  
+   no switchport  
+   ip address {{ config.ip }} {{ config.mask }}  
+   no shutdown  
+!  
+{% endfor %}  
+{% endif %}  
+
+{% endif %}

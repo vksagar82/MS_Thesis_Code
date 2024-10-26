@@ -1,0 +1,28 @@
+{# templates/configure_host_details.j2 #}  
+{% if hostvars[inventory_hostname].os_details.network_os == 'junos' %}  
+
+
+system {  
+    host-name {{ router_details.hostname }};  
+    login {  
+        message "{{ router_details.banner }}";  
+    }  
+}  
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'ios' %}  
+
+hostname {{ router_details.hostname }}  
+!  
+banner motd c {{ router_details.banner }} c  
+!  
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'eos' %}  
+
+hostname {{ router_details.hostname }}  
+!   
+banner motd  
+"{{ router_details.banner }}"  
+EOF  
+!  
+
+{% endif %}

@@ -1,0 +1,41 @@
+{# templates/configure_loopback.j2 #}  
+
+{% if hostvars[inventory_hostname].os_details.network_os == 'junos' %}  
+interfaces {  
+    lo0 {  
+        description "Loopback Interface";  
+        unit 0 {  
+            family inet {  
+{% if hostvars[inventory_hostname].loopback_configs is defined %}  
+{% for loopback_name, addresses in hostvars[inventory_hostname].loopback_configs.items() %}  
+    {% for addr in addresses %}  
+                address {{ addr.ip }}/{{ addr.mask }} {  
+    {% if addr.status is defined and addr.status == 'primary' %}  
+                    primary;  
+    {% endif %}  
+                }  
+    {% endfor %}  
+{% endfor %}  
+{% endif %}  
+            }  
+        }  
+    }  
+}  
+
+{% elif hostvars[inventory_hostname].os_details.network_os in ['ios', 'eos'] %}  
+{% if hostvars[inventory_hostname].loopback_configs is defined %}  
+    {% for loopback_name, addresses in hostvars[inventory_hostname].loopback_configs.items() %}  
+interface {{ loopback_name }}  
+        {% for addr in addresses %}  
+    ip address {{ addr.ip }} {{ addr.mask }}  
+            {% if addr.status is not defined or addr.status != 'primary' %}  
+    description Loopback Interface   
+            {% else %}  
+    description Primary Loopback Interface  
+            {% endif %}  
+        {% endfor %}  
+!  
+    {% endfor %}  
+{% endif %}  
+
+{% endif %}

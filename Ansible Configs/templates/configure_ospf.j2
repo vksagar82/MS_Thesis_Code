@@ -1,0 +1,55 @@
+{# templates/configure_ospf.j2 #}  
+
+{% if hostvars[inventory_hostname].os_details.network_os == 'junos' %}  
+protocols {  
+    ospf {  
+        area {{ hostvars[inventory_hostname].ospf_config.area | default('0.0.0.0') }} {  
+            {% if hostvars[inventory_hostname].ospf_config.interfaces is defined %}  
+            {% for interface in hostvars[inventory_hostname].ospf_config.interfaces %}  
+            {% if 'lo0' in interface %}  
+            interface {{ interface }} {  
+                passive;  
+            }  
+            {% else %}  
+            interface {{ interface }};  
+            {% endif %}  
+            {% endfor %}  
+            {% endif %}  
+        }  
+    }  
+}  
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'ios' %}  
+router ospf 1  
+ {% if hostvars[inventory_hostname].ospf_config.router_id is defined %}  
+ router-id {{ hostvars[inventory_hostname].ospf_config.router_id }}  
+ {% endif %}  
+ {% if hostvars[inventory_hostname].ospf_config.networks is defined %}  
+ {% for network in hostvars[inventory_hostname].ospf_config.networks %}  
+ network {{ network.network }} {{ network.mask }} area {{ hostvars[inventory_hostname].ospf_config.area }}  
+ {% endfor %}  
+ {% endif %}  
+ {% if hostvars[inventory_hostname].ospf_config.passive is defined %}  
+ {% for interface in hostvars[inventory_hostname].ospf_config.passive %}  
+ passive-interface {{ interface }}  
+ {% endfor %}  
+ {% endif %}  
+!  
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'eos' %}  
+router ospf 1  
+   {% if hostvars[inventory_hostname].ospf_config.router_id is defined %}  
+   router-id {{ hostvars[inventory_hostname].ospf_config.router_id }}  
+   {% endif %}  
+   {% if hostvars[inventory_hostname].ospf_config.networks is defined %}  
+   {% for network in hostvars[inventory_hostname].ospf_config.networks %}  
+   network {{ network.network }} {{ network.mask }} area {{ hostvars[inventory_hostname].ospf_config.area }}  
+   {% endfor %}  
+   {% endif %}  
+   {% if hostvars[inventory_hostname].ospf_config.passive is defined %}  
+   {% for interface in hostvars[inventory_hostname].ospf_config.passive %}  
+   passive-interface {{ interface }}  
+   {% endfor %}  
+   {% endif %}  
+!  
+{% endif %}

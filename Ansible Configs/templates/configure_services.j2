@@ -1,0 +1,37 @@
+{# templates/configure_services.j2 #}  
+
+{% if hostvars[inventory_hostname].os_details.network_os == 'junos' %}  
+system {  
+    services {  
+        {% if hostvars[inventory_hostname].network_services.ssh | default(false) %}  
+        ssh;  
+        {% endif %}  
+    }  
+}  
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'ios' %}  
+{% if hostvars[inventory_hostname].network_services.ssh | default(false) %}  
+line vty 0 4  
+ transport input ssh
+ login local 
+!  
+ip ssh version 2  
+ip scp server enable
+{% endif %}  
+!  
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'eos' %}  
+{% if hostvars[inventory_hostname].network_services.ssh | default(false) %}  
+management ssh  
+no shutdown  
+!  
+
+management api http-commands
+protocol http
+no shutdown
+!
+{% endif %}  
+ip routing  
+!  
+
+{% endif %}

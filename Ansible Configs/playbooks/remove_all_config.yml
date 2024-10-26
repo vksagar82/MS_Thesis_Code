@@ -1,0 +1,49 @@
+# playbooks/remove_host_details.yml
+---
+- name: Remove All Config
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Generate Remove Configuration
+      template:
+        src: "/etc/ansible/templates/remove_all_config.j2"
+        dest: "/etc/ansible/configs/{{ inventory_hostname }}_remove_config.txt"
+      delegate_to: localhost
+      connection: local
+
+    - name: Remove Configuration using NAPALM
+      napalm_install_config:
+        hostname: "{{ ansible_host }}"
+        username: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+        dev_os: "{{ ansible_network_os }}"
+        config_file: "/etc/ansible/configs/{{ inventory_hostname }}_remove_config.txt"
+        commit_changes: true
+        replace_config: false
+        diff_file: "/etc/ansible/reports/{{ inventory_hostname }}_remove_diff.txt"
+      register: output
+      ignore_errors: yes
+      #failed_when: false  # This prevents showing the task as failed
+      #changed_when: false # This prevents showing the task as changed
+
+    - name: Display Status
+      debug:
+        msg: "Configuration already removed or not present on {{ inventory_hostname }}"
+      when: "'statement not found' in output.msg"
+
+    - name: Read diff file
+      command: "cat /etc/ansible/reports/{{ inventory_hostname }}_remove_diff.txt"
+      register: diff_output
+      delegate_to: localhost
+
+    - name: Display Formatted Diff
+      debug:
+        msg: "{{ diff_output.stdout_lines }}"
+      when: diff_output.stdout_lines | length > 0
+
+    - name: Save Output
+      copy:
+        content: "{{ output | to_nice_yaml }}"
+        dest: "/etc/ansible/reports/{{ inventory_hostname }}_remove_output.yml"
+      delegate_to: localhost

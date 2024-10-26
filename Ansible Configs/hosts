@@ -1,0 +1,50 @@
+[ios_devices]
+cisco5-65001 ansible_host=100.100.100.5
+cisco6-65001 ansible_host=100.100.100.6
+cisco7-65001 ansible_host=100.100.100.7
+cisco4-65002 ansible_host=10.10.10.4
+cisco5-65002 ansible_host=10.10.10.5
+cisco6-65002 ansible_host=10.10.10.6
+cisco7-65002 ansible_host=10.10.10.7
+cisco8-65002 ansible_host=10.10.10.8
+cisco7-65003 ansible_host=20.20.20.7
+cisco8-65003 ansible_host=20.20.20.8
+
+[junos_devices]
+juniper1-65001 ansible_host=100.100.100.1
+juniper2-65001 ansible_host=100.100.100.2
+juniper3-65001 ansible_host=100.100.100.3
+juniper4-65001 ansible_host=100.100.100.4
+juniper8-65001 ansible_host=100.100.100.8
+juniper1-65002 ansible_host=10.10.10.1
+juniper2-65002 ansible_host=10.10.10.2
+juniper3-65002 ansible_host=10.10.10.3
+juniper5-65003 ansible_host=20.20.20.5
+juniper6-65003 ansible_host=20.20.20.6
+
+[arista_devices]
+arista9-65001 ansible_host=100.100.100.9
+arista10-65001 ansible_host=100.100.100.10
+arista11-65001 ansible_host=100.100.100.11
+arista9-65002 ansible_host=10.10.10.9
+arista10-65002 ansible_host=10.10.10.10
+arista11-65002 ansible_host=10.10.10.11
+arista1-65003 ansible_host=20.20.20.1
+arista2-65003 ansible_host=20.20.20.2
+arista3-65003 ansible_host=20.20.20.3
+arista4-65003 ansible_host=20.20.20.4
+
+[ios_devices:vars]
+ansible_network_os=ios
+
+[junos_devices:vars]
+ansible_network_os=junos
+
+[arista_devices:vars]
+ansible_network_os=eos
+
+[all:vars]  
+ansible_python_interpreter="/etc/napalm_env/bin/python3"
+ansible_user=saltuser
+ansible_password=admin123
+ansible_connection=network_cli
