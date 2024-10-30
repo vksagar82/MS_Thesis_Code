@@ -1,0 +1,23 @@
+{# templates/remove_all_config.j2 #}  
+
+{% if hostvars[inventory_hostname].os_details.network_os == 'eos' %}  
+{# Arista EOS Section #}  
+
+no hostname  
+no banner motd  
+
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'ios' %}  
+{# Cisco IOS Section #}  
+
+{# Remove device identity configurations #}  
+no hostname  
+no banner motd  
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'junos' %}  
+{# Juniper JUNOS Section #}  
+
+delete system host-name  
+delete system login message  
+
+{% endif %}

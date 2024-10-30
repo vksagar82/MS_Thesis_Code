@@ -1,0 +1,168 @@
+{# templates/configure_host_details.j2 #}  
+{% if hostvars[inventory_hostname].os_details.network_os == 'junos' %}  
+
+
+system {  
+    host-name {{ router_details.hostname }};  
+    login {  
+        message "{{ router_details.banner }}";  
+    }  
+}  
+
+interfaces {  
+    lo0 {  
+        description "Loopback Interface";  
+        unit 0 {  
+            family inet {  
+{% if hostvars[inventory_hostname].loopback_configs is defined %}  
+{% for loopback_name, addresses in hostvars[inventory_hostname].loopback_configs.items() %}  
+    {% for addr in addresses %}  
+                address {{ addr.ip }}/{{ addr.mask }} {  
+    {% if addr.status is defined and addr.status == 'primary' %}  
+                    primary;  
+    {% endif %}  
+                }  
+    {% endfor %}  
+{% endfor %}  
+{% endif %}  
+            }  
+        }  
+    }  
+
+{% if hostvars[inventory_hostname].wan_config is defined %}  
+  {% for interface, config in hostvars[inventory_hostname].wan_config.items() %}  
+    {{ interface }} {  
+        mtu {{ config.mtu | default('1500') }};  
+        unit 0 {  
+            description "{{ config.description | default('WAN interface configured by Ansible') }}";  
+            family inet {  
+                address {{ config.ip }}/{{ config.mask }};  
+            }  
+        }  
+    }  
+  {% endfor %}  
+{% endif %}  
+}  
+
+protocols {  
+    ospf {  
+        area {{ hostvars[inventory_hostname].ospf_config.area | default('0.0.0.0') }} {  
+            {% if hostvars[inventory_hostname].ospf_config.interfaces is defined %}  
+            {% for interface in hostvars[inventory_hostname].ospf_config.interfaces %}  
+            {% if 'lo0' in interface %}  
+            interface {{ interface }} {  
+                passive;  
+            }  
+            {% else %}  
+            interface {{ interface }};  
+            {% endif %}  
+            {% endfor %}  
+            {% endif %}  
+        }  
+    }  
+}  
+
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'ios' %}  
+
+hostname {{ router_details.hostname }}  
+!  
+banner motd c {{ router_details.banner }} c  
+!  
+
+{% if hostvars[inventory_hostname].loopback_configs is defined %}  
+    {% for loopback_name, addresses in hostvars[inventory_hostname].loopback_configs.items() %}  
+interface {{ loopback_name }}  
+        {% for addr in addresses %}  
+    ip address {{ addr.ip }} {{ addr.mask }}  
+            {% if addr.status is not defined or addr.status != 'primary' %}  
+    description Loopback Interface   
+            {% else %}  
+    description Primary Loopback Interface  
+            {% endif %}  
+        {% endfor %}  
+!  
+    {% endfor %}  
+{% endif %}  
+
+{% if hostvars[inventory_hostname].wan_config is defined %}  
+  {% for interface, config in hostvars[inventory_hostname].wan_config.items() %}  
+interface {{ interface }}  
+ description {{ config.description | default('WAN interface configured by Ansible') }}  
+ ip address {{ config.ip }} {{ config.mask }}  
+ mtu {{ config.mtu | default('1500') }}  
+ no shutdown  
+!  
+  {% endfor %}  
+{% endif %}  
+
+router ospf 1  
+ {% if hostvars[inventory_hostname].ospf_config.router_id is defined %}  
+ router-id {{ hostvars[inventory_hostname].ospf_config.router_id }}  
+ {% endif %}  
+ {% if hostvars[inventory_hostname].ospf_config.networks is defined %}  
+ {% for network in hostvars[inventory_hostname].ospf_config.networks %}  
+ network {{ network.network }} {{ network.mask }} area {{ hostvars[inventory_hostname].ospf_config.area }}  
+ {% endfor %}  
+ {% endif %}  
+ {% if hostvars[inventory_hostname].ospf_config.passive is defined %}  
+ {% for interface in hostvars[inventory_hostname].ospf_config.passive %}  
+ passive-interface {{ interface }}  
+ {% endfor %}  
+ {% endif %}  
+!  
+
+
+{% elif hostvars[inventory_hostname].os_details.network_os == 'eos' %}  
+
+hostname {{ router_details.hostname }}  
+!   
+banner motd  
+"{{ router_details.banner }}"  
+EOF  
+!  
+{% if hostvars[inventory_hostname].loopback_configs is defined %}  
+    {% for loopback_name, addresses in hostvars[inventory_hostname].loopback_configs.items() %}  
+interface {{ loopback_name }}  
+        {% for addr in addresses %}  
+    ip address {{ addr.ip }} {{ addr.mask }}  
+            {% if addr.status is not defined or addr.status != 'primary' %}  
+    description Loopback Interface   
+            {% else %}  
+    description Primary Loopback Interface  
+            {% endif %}  
+        {% endfor %}  
+!  
+    {% endfor %}  
+{% endif %}  
+
+{% if hostvars[inventory_hostname].wan_config is defined %}  
+{% for interface, config in hostvars[inventory_hostname].wan_config.items() %}  
+interface {{ interface }}  
+   description {{ config.description | default('WAN interface configured by Ansible') }}  
+   mtu {{ config.mtu | default('1500') }}  
+   no switchport  
+   ip address {{ config.ip }} {{ config.mask }}  
+   no shutdown  
+!  
+{% endfor %}  
+{% endif %}  
+
+router ospf 1  
+   {% if hostvars[inventory_hostname].ospf_config.router_id is defined %}  
+   router-id {{ hostvars[inventory_hostname].ospf_config.router_id }}  
+   {% endif %}  
+   {% if hostvars[inventory_hostname].ospf_config.networks is defined %}  
+   {% for network in hostvars[inventory_hostname].ospf_config.networks %}  
+   network {{ network.network }} {{ network.mask }} area {{ hostvars[inventory_hostname].ospf_config.area }}  
+   {% endfor %}  
+   {% endif %}  
+   {% if hostvars[inventory_hostname].ospf_config.passive is defined %}  
+   {% for interface in hostvars[inventory_hostname].ospf_config.passive %}  
+   passive-interface {{ interface }}  
+   {% endfor %}  
+   {% endif %}  
+!  
+
+{# Main EndIF for host type checks#}
+{% endif %}

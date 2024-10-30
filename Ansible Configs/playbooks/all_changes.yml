@@ -1,0 +1,62 @@
+# # configure_all.yml
+# - name: Configure WAN
+#   import_playbook: configure_wan.yml
+
+# - name: Configure Host Details
+#   import_playbook: configure_host_details.yml
+
+# - name: Configure Services
+#   import_playbook: configure_services.yml
+
+# - name: Configure Loopback
+#   import_playbook: configure_loopback.yml
+
+# - name: Configure OSPF
+#   import_playbook: configure_ospf.yml
+
+# - name: Configure BGP
+#   import_playbook: configure_bgp.yml
+
+---
+- name: Configure All
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Generate Configuration
+      template:
+        src: "/etc/ansible/templates/all_changes.j2"
+        dest: "/etc/ansible/configs/{{ inventory_hostname }}_config.txt"
+      delegate_to: localhost
+      connection: local
+      vars:
+        router_details: "{{ hostvars[inventory_hostname].router_details }}"
+
+    - name: Configure Devices using NAPALM
+      napalm_install_config:
+        hostname: "{{ ansible_host }}"
+        username: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+        dev_os: "{{ ansible_network_os }}"
+        config_file: "/etc/ansible/configs/{{ inventory_hostname }}_config.txt"
+        commit_changes: true
+        replace_config: false
+        diff_file: "/etc/ansible/reports/{{ inventory_hostname }}_diff.txt"
+      register: output
+      ignore_errors: yes
+
+    - name: Read diff file
+      command: "cat /etc/ansible/reports/{{ inventory_hostname }}_diff.txt"
+      register: diff_output
+      delegate_to: localhost
+
+    - name: Display Formatted Diff
+      debug:
+        msg: "{{ diff_output.stdout_lines }}"
+      when: diff_output.stdout_lines | length > 0
+
+    - name: Save Output
+      copy:
+        content: "{{ output | to_nice_yaml }}"
+        dest: "/etc/ansible/reports/{{ inventory_hostname }}_output.yml"
+      delegate_to: localhost
