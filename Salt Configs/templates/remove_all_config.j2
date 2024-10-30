@@ -9,6 +9,20 @@ delete policy-options
 delete system host-name
 delete system login message
 
+{# For Juniper, we need to be careful with interface em2 #}  
+{% if pillar.wan_config is defined %}  
+{% for interface, interface_config in pillar.wan_config.items() %}  
+{% if interface != 'em2' %}  
+delete interfaces {{ interface }}  
+{% endif %}  
+{% if interface == 'em2' %}  
+delete interfaces em2 mtu
+{% endif %}  
+{% endfor %}  
+{% endif %}  
+
+
+{# CISCO CONFIGS #}
 {%- elif device_os == 'ios' %}
 no router bgp {{ pillar['bgp_config']['local_as'] }}
 no router ospf 1
@@ -22,6 +36,9 @@ no mtu
 {# Remove static routes if there are EBGP neighbors #}  
 {% if pillar['bgp_config']['neighbors'].values() | selectattr('type', 'equalto', 'external') | list %}  
 no ip route *  
+no ip prefix-list FILTER_EBGP_STATIC
+no route-map FILTER_EBGP_STATIC  
+
 {% endif %}  
 
 {# Remove RR configurations if the router is an RR client #}  
@@ -39,11 +56,11 @@ interface {{ interface }}
  no description  
 !  
 {% endif %}  
+{% if interface == 'GigabitEthernet0/2' %} 
+interface {{ interface }}   
+ no mtu 
+{% endif %}
 {% endfor %}
-
-{# For GigabitEthernet0/2, only remove MTU if it was set #}  
-interface GigabitEthernet0/2  
- no mtu  
 
 
 {# EOS CONFIG REMOVAL ARISTA #}
@@ -55,32 +72,39 @@ no router ospf 1
 
 {# Remove device identity configurations #}  
 no hostname  
-no banner login  
+no banner motd  
 
 {# Remove loopback interfaces #}  
-no interface loopback 0  
-no interface loopback 1  
+{% if pillar.loopback_configs is defined %}  
+{% for loopback, configs in pillar.loopback_configs.items() %}  
+no interface {{ loopback }}  
+{% endfor %}  
+{% endif %}  
 
-{# Remove static routes for EBGP neighbors #}  
-{% if pillar['bgp_config']['neighbors'].values() | selectattr('type', 'equalto', 'external') | list %}  
-  {% for neighbor in pillar['bgp_config']['neighbors'].values() if neighbor.type == 'external' %}  
-    {% if neighbor.get('ip_address') %}  
-no ip route {{ neighbor.ip_address }}/32  
-    {% endif %}  
-  {% endfor %}  
-{% endif %} 
 
-{# Remove filters and route-maps if the device is an RR client #}  
-{% if pillar['bgp_config'].get('rr_client') %}  
+{# Remove static routes if there are EBGP neighbors #}  
+{% if pillar.bgp_config.neighbors is defined %}  
+{% for neighbor_group in pillar.bgp_config.neighbors.values() %}  
+{% if neighbor_group.type == 'external' %} 
 no ip prefix-list FILTER_EBGP_STATIC  
-no ip prefix-list FILTER_LOOPBACKS  
-
 no route-map FILTER_EBGP_STATIC  
+
+{% for peer_ip in neighbor_group.peers.keys() %}  
+no ip route {{ peer_ip }}/32  
+{% endfor %}  
+{% endif %}  
+{% endfor %}  
+{% endif %}  
+
+{# Remove RR configurations if the router is an RR client #}  
+{% if pillar.bgp_config.rr_client %}  
+no ip prefix-list FILTER_LOOPBACKS  
 no route-map OUTBOUND_FILTER  
 {% endif %}  
 
-{# Reset WAN interfaces except management interface (Ethernet2) #}  
-{% for interface in pillar['wan_config'] %}  
+{# Reset WAN interfaces except Ethernet2 #}  
+{% if pillar.wan_config is defined %}  
+{% for interface, interface_config in pillar.wan_config.items() %}  
 {% if interface != 'Ethernet2' %}  
 interface {{ interface }}  
    default ip address  
@@ -88,10 +112,14 @@ interface {{ interface }}
    no description  
 !  
 {% endif %}  
+{% if interface == 'Ethernet2' %}
+interface {{ interface }}
+no mtu
+!
+{% endif %}
 {% endfor %}  
+{% endif %} 
 
-{# Ensure MTU is reset on management interface #}  
-interface Ethernet2  
-   default mtu  
 
+{#FINAL ENDIF#}
 {%- endif %}

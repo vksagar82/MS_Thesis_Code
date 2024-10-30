@@ -21,7 +21,10 @@ no interface {{ loopback }}
 {# Remove static routes if there are EBGP neighbors #}  
 {% if hostvars[inventory_hostname].bgp_config.neighbors is defined %}  
 {% for neighbor_group in hostvars[inventory_hostname].bgp_config.neighbors.values() %}  
-{% if neighbor_group.type == 'external' %}  
+{% if neighbor_group.type == 'external' %} 
+no ip prefix-list FILTER_EBGP_STATIC  
+no route-map FILTER_EBGP_STATIC  
+
 {% for peer_ip in neighbor_group.peers.keys() %}  
 no ip route {{ peer_ip }}/32  
 {% endfor %}  
@@ -31,9 +34,7 @@ no ip route {{ peer_ip }}/32
 
 {# Remove RR configurations if the router is an RR client #}  
 {% if hostvars[inventory_hostname].bgp_config.rr_client %}  
-no ip prefix-list FILTER_EBGP_STATIC  
 no ip prefix-list FILTER_LOOPBACKS  
-no route-map FILTER_EBGP_STATIC  
 no route-map OUTBOUND_FILTER  
 {% endif %}  
 
@@ -76,6 +77,8 @@ no interface {{ loopback }}
 {% if hostvars[inventory_hostname].bgp_config.neighbors is defined %}  
 {% for neighbor_group in hostvars[inventory_hostname].bgp_config.neighbors.values() %}  
 {% if neighbor_group.type == 'external' %}  
+no ip prefix-list FILTER_EBGP_STATIC
+no route-map FILTER_EBGP_STATIC
 {% for peer_ip in neighbor_group.peers.keys() %}  
 no ip route {{ peer_ip }} 255.255.255.255
 {% endfor %}  
@@ -85,9 +88,7 @@ no ip route {{ peer_ip }} 255.255.255.255
 
 {# Remove RR configurations if the router is an RR client #}  
 {% if hostvars[inventory_hostname].bgp_config.rr_client %}  
-no ip prefix-list FILTER_EBGP_STATIC  
 no ip prefix-list FILTER_LOOPBACKS  
-no route-map FILTER_EBGP_STATIC  
 no route-map OUTBOUND_FILTER  
 {% endif %}  
 

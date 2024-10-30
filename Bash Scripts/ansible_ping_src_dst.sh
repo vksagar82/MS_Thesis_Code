@@ -120,7 +120,7 @@ parse_ping_output() {
         "arista")  
             if echo "$output" | grep -q "0% packet loss"; then  
                 result="Success"  
-                if [[ $output =~ min/avg/max[[:space:]]*=[[:space:]]*([0-9.]+)/([0-9.]+)/([0-9.]+) ]]; then  
+                if [[ $output =~ rtt[[:space:]]min/avg/max/mdev[[:space:]]*=[[:space:]]*([0-9.]+)/([0-9.]+)/([0-9.]+) ]]; then  
                     min_rtt="${BASH_REMATCH[1]}"  
                     avg_rtt="${BASH_REMATCH[2]}"  
                     max_rtt="${BASH_REMATCH[3]}"  
@@ -137,7 +137,7 @@ parse_ping_output() {
                 avg_rtt="-"  
                 max_rtt="-"  
             fi  
-            ;;  
+            ;; 
     esac  
 
     echo "$result|$min_rtt|$avg_rtt|$max_rtt|$loss"  

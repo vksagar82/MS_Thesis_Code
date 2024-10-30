@@ -1,0 +1,20 @@
+{%- set device_os = grains.get('os', '') %} 
+
+{%- if device_os == 'junos' %}  
+delete system host-name
+delete system login message
+
+{# CISCO CONFIGS #}
+{%- elif device_os == 'ios' %}
+no hostname
+no banner motd
+
+
+{# EOS CONFIG REMOVAL ARISTA #}
+{% elif device_os =='eos' %}
+
+{# Remove device identity configurations #}  
+no hostname  
+no banner motd  
+
+{%- endif %}

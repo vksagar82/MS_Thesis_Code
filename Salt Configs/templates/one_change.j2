@@ -1,0 +1,28 @@
+{%- set device_os = grains.get('os', '') %}
+{%- set router_configs = pillar.get('router_details', {}) %}  
+
+{%- if device_os == 'junos' %}
+
+
+system {  
+    host-name {{ router_configs.hostname }};  
+    login {  
+        message "{{ router_configs.banner }}";  
+    }  
+}  
+
+{%- elif device_os == 'ios' %}
+
+hostname {{ router_configs.hostname }}  
+!
+banner motd c {{ router_configs.banner }} c  
+!
+{%- elif device_os == 'eos' %}
+
+hostname {{ router_configs.hostname }}
+! 
+banner motd
+"{{ router_configs.banner }}"
+EOF
+!
+{%- endif %}

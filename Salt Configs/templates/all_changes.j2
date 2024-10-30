@@ -1,0 +1,463 @@
+{%- set device_os = grains.get('os', '') %}
+{%- set router_configs = pillar.get('router_details', {}) %}  
+{%- set wan_config = pillar.get('wan_config', {}) %}  
+{%- set interface_name = wan_config.get('interface', 'em2') %}  
+{%- set ip_address = wan_config.get('ip', '') %}  
+{%- set subnet_mask = wan_config.get('mask', '24') %}  
+{%- set mtu = wan_config.get('mtu','1500') %}
+{%- set description_val = wan_config.get('description', 'WAN interface configured by Salt') %}  
+{%- set ospf_config = pillar.get('ospf_config', {}) %}  
+{%- set loopback_configs = pillar.get('loopback_configs', {}) %}  
+{%- set bgp_config = pillar.get('bgp_config', {}) %}  
+{%- set local_as = bgp_config.get('local_as', '65000') %} 
+{%- set router_id = bgp_config.get('router_id', '0.0.0.0') %}  
+{%- set loopbacks = salt['pillar.get']('loopback_configs',{}) %}  
+{%- set is_rr = bgp_config.rr_client %}  
+
+{# Juniper Configs #}
+{%- if device_os == 'junos' %}
+
+system {  
+    host-name {{ router_configs.hostname }};  
+    login {  
+        message "{{ router_configs.banner }}";  
+    }  
+}  
+interfaces {  
+  {%- for interface, config in wan_config.items() %}  
+    {{ interface }} {  
+        mtu {{ config.get('mtu', '1500') }};  
+        unit 0 {  
+            description "{{ config.get('description', 'WAN interface configured by Salt') }}";  
+            family inet {  
+                address {{ config.ip }}/{{ config.mask }};  
+            }  
+        }  
+    }  
+  {%- endfor %}  
+
+    lo0 {  
+        description "Loopback Interface";  
+        unit 0 {  
+            family inet {  
+{%- for loopback_name, addresses in loopback_configs.items() %}  
+    {%- for addr in addresses %}  
+                address {{ addr.ip }}/{{ addr.mask }} {  
+    {%- if addr.get('status') == 'primary' %}  
+                    primary;  
+    {%- endif %}  
+                }  
+    {%- endfor %}  
+{%- endfor %}  
+            }  
+        }  
+    }  
+
+} 
+protocols {  
+    ospf {  
+        area {{ ospf_config.get('area', '0.0.0.0') }} {  
+            {%- for interface in ospf_config.get('interfaces', []) %}  
+            {% if 'lo0' in interface %}
+            interface {{ interface }} {
+                passive;
+            }
+            {% else %}
+            interface {{ interface }};
+            {% endif %}
+
+            {%- endfor %}  
+        }  
+    } 
+} 
+routing-options {  
+    {% for group_name, group_config in bgp_config.neighbors.items() %}  
+    {% if group_config.type == 'external' %}  
+    {% for neighbor, neighbor_config in group_config.peers.items() %}  
+    {% if group_config.next_hop is defined %}  
+    static {  
+        route {{ neighbor }}/32 next-hop {{ group_config.next_hop }};  
+    }  
+    {% endif %}  
+    {% endfor %}  
+    {% endif %}  
+    {% endfor %}  
+    router-id {{ bgp_config.router_id }};  
+    autonomous-system {{ bgp_config.local_as }};  
+}  
+policy-options {
+    {% for group_name, group_config in bgp_config.neighbors.items() %}  
+
+    {% if group_config.type == 'internal' and not bgp_config.rr_client %}
+    policy-statement EXPORT_LOOPBACKS {  
+        term loopbacks {  
+            from interface lo0.0;  
+            then next-hop self;
+            then accept;  
+
+        }  
+        term others {  
+            then reject;  
+        }  
+    }  
+    {% endif %}
+
+    {% if group_config.type=='external' and group_config.peers %}
+    policy-statement EXPORT_LOOPBACKS_EBGP {  
+        term others {  
+            from protocol static;  
+            then reject;  
+        }  
+        term loopback {  
+            from {  
+                route-filter 0.0.0.0/0 prefix-length-range /32-/32;  
+            }  
+            then accept;  
+        }  
+    }  
+    {% endif %}  
+    
+    {% if group_config.type=='external'%}
+
+    policy-statement STATIC_EBGP_ROUTE {  
+        term static_routes {  
+            from {  
+                protocol static;  
+                {% for neighbor in group_config.peers %}  
+                route-filter {{ neighbor }}/32 exact;  
+                {% endfor %}  
+            }  
+            then {  
+                next-hop self;  
+                accept;  
+            }  
+        }  
+        term others {  
+            then reject;  
+        }  
+    }  
+
+    {% endif %}
+    {% endfor %}
+
+    policy-statement NEXT-HOP-SELF {  
+        term 1 {  
+            from protocol bgp;  
+            then {  
+                next-hop self;  
+                accept;  
+            } 
+        }
+    } 
+  
+}
+{%- set ns = namespace(has_ebgp=false) %}  
+{%- for group_name, group_config in bgp_config.neighbors.items() %}  
+  {%- if group_config.type == 'external' %}  
+    {%- set ns.has_ebgp = true %}  
+    {%- break %}  
+  {%- endif %}  
+{%- endfor %}  
+
+protocols {  
+    bgp {  
+        {% for group_name, group_config in bgp_config.neighbors.items() %}  
+        group {{ group_name }} {  
+            type {{ group_config.type }};  
+            local-address {{ bgp_config.router_id }};  
+            family inet {  
+                unicast;  
+            }  
+            {% if group_config.type == 'internal' %}  
+              {% if ns.has_ebgp == true %}  
+                export [ NEXT-HOP-SELF STATIC_EBGP_ROUTE ];  
+              {% elif not bgp_config.rr_client %}  
+                export [NEXT-HOP-SELF EXPORT_LOOPBACKS];
+              {% else %}
+                export [ NEXT-HOP-SELF ]
+              {% endif %}  
+            {% else %}  
+                export [ NEXT-HOP-SELF EXPORT_LOOPBACKS_EBGP ];  
+            {% endif %}  
+            peer-as {{ group_config.peer_as }};  
+            {% if group_config.type == 'internal' and bgp_config.rr_client %}  
+            cluster {{ group_config.cluster }};  
+            {% endif %}  
+            {% if group_config.type == 'external' %}  
+            multihop;  
+            {% endif %}  
+            {% for neighbor, neighbor_config in group_config.peers.items() %}  
+            neighbor {{ neighbor }} {  
+                description "{{ neighbor_config.description }}";  
+            }  
+            {% endfor %}  
+        }  
+        {% endfor %}  
+    }  
+}
+
+
+{# CISCO CONFIGS #}
+{%- elif device_os == 'ios' %}
+
+hostname {{ router_configs.hostname }}  
+!
+banner motd c {{ router_configs.banner }} c  
+!
+{# WAN CONFIGS #}
+{%- for interface, config in wan_config.items() %}  
+interface {{ interface }}  
+ description {{ config.get('description', 'WAN interface configured by Salt') }}  
+ ip address {{ config.ip }} {{ config.mask }}  
+ mtu {{ config.get('mtu', '1500') }}  
+ no shutdown  
+!  
+{%- endfor %} 
+{# LOOPBACK CONFIGS #}
+{%- for loopback_name, addresses in loopback_configs.items() %}  
+    interface {{ loopback_name }}  
+    {%- for addr in addresses %}  
+        ip address {{ addr.ip }} {{ addr.mask }}  
+        {%- if addr.get('status') != 'primary' %}  
+            description Loopback Interface 
+        {%- else %}  
+            description Primary Loopback Interface
+        {%- endif %}  
+    {%- endfor %}  
+{%- endfor %}  
+! 
+{# OSPF CONFIGS #}
+router ospf 1  
+ router-id {{ ospf_config.router_id }}  
+{% for network in ospf_config.networks %}  
+ network {{ network.network }} {{ network.mask }} area {{ ospf_config.area }}  
+{% endfor %}  
+{% for interface in ospf_config.passive %}  
+ passive-interface {{ interface }}  
+{% endfor %}
+!
+{# IP ROUTE #}
+{% for group_name, group in bgp_config['neighbors'].items() %}  
+{% if group['type'] == 'external' and group.get('next_hop') %}  
+ip route {{ group['peers'].keys()|first }} 255.255.255.255 {{ group['next_hop'] }}  
+{% endif %}  
+{% endfor %}  
+
+{# EBGP static route filtering #}  
+{% set ebgp_neighbors = bgp_config.neighbors.values() | selectattr('type', 'equalto', 'external') | list %}  
+{% if ebgp_neighbors %}  
+{% set seq_num = 0 %}  
+{% for group in ebgp_neighbors %}  
+{% for peer_ip in group['peers'].keys() %}  
+ip prefix-list FILTER_EBGP_STATIC seq {{ seq_num + 5 }} deny {{ peer_ip }}/32  
+{% endfor %}  
+{% endfor %}  
+ip prefix-list FILTER_EBGP_STATIC seq 1000 permit 0.0.0.0/0 le 32  
+
+{% for group_name, group in bgp_config['neighbors'].items() %}  
+{% if group['type'] == 'external' %}  
+route-map FILTER_EBGP_STATIC permit 10  
+ match ip address prefix-list FILTER_EBGP_STATIC  
+{% endif %}  
+{% endfor %}  
+{% endif %}
+
+
+{# IBGP Route Filters Own ASN Prefixes #}
+{% if is_rr %}  
+{% for name, config in loopbacks.items() %}  
+ip prefix-list FILTER_LOOPBACKS seq {{ loop.index * 5 }} deny {{ config[0]['ip'].split('.')[0:3]|join('.') }}.0/24 ge 32  
+{% endfor %}  
+ip prefix-list FILTER_LOOPBACKS seq {{ (loopbacks|length + 1) * 5 }} permit 0.0.0.0/0 le 32  
+route-map OUTBOUND_FILTER permit 10  
+ match ip address prefix-list FILTER_LOOPBACKS  
+{% endif %}
+
+
+{# BGP CONFIGURATION #}
+router bgp {{ local_as }}  
+ bgp router-id {{ router_id }}  
+ bgp log-neighbor-changes  
+{% if is_rr %}  
+ bgp cluster-id {{ router_id }}  
+{% endif %}  
+{% for group_name, group in bgp_config['neighbors'].items() %}  
+ neighbor {{ group_name }} peer-group  
+ neighbor {{ group_name }} remote-as {{ group['peer_as'] }}  
+{% if group['type'] == 'internal' %}  
+ neighbor {{ group_name }} update-source Loopback0  
+{% elif group['type'] == 'external' %}  
+ neighbor {{ group_name }} ebgp-multihop 255  
+ neighbor {{ group_name }} update-source Loopback0  
+{% endif %}  
+{% for peer, peer_config in group['peers'].items() %}  
+ neighbor {{ peer }} peer-group {{ group_name }}  
+ neighbor {{ peer }} description {{ peer_config['description'] }}  
+{% endfor %}  
+{% endfor %}  
+ !  
+ address-family ipv4  
+{% for name, config in loopbacks.items() %}  
+  network {{ config[0]['ip'] }} mask 255.255.255.255  
+{% endfor %}  
+{% for group_name, group in bgp_config['neighbors'].items() %}  
+{% if group['type'] == 'internal' %}  
+{% if is_rr %}  
+  neighbor {{ group_name }} route-reflector-client  
+  neighbor {{ group_name }} route-map OUTBOUND_FILTER out
+{% endif %}  
+  neighbor {{ group_name }} next-hop-self  
+  neighbor {{ group_name }} soft-reconfiguration inbound  
+{% elif group['type'] == 'external' %}  
+  neighbor {{ group_name }} soft-reconfiguration inbound
+  neighbor {{ group_name }} route-map FILTER_EBGP_STATIC out  
+{% endif %}  
+{% for peer in group['peers'] %}  
+  neighbor {{ peer }} activate  
+{% endfor %}  
+{% endfor %}  
+ exit-address-family  
+!  
+
+
+
+
+
+{# ARISTA CONFIGS#}
+{%- elif device_os == 'eos' %}
+
+hostname {{ router_configs.hostname }}
+! 
+banner motd
+"{{ router_configs.banner }}"
+EOF
+!
+{# WAN CONFIGS#}
+{% for interface, config in wan_config.items() %}  
+interface {{ interface }}  
+   description {{ config.description }}  
+   mtu {{ config.mtu }}  
+   no switchport  
+   ip address {{ config.ip }} {{ config.mask }}
+   no shutdown  
+!  
+{% endfor %}  
+{#LOOPBACK CONFIGS#}
+{%- for loopback_name, addresses in loopback_configs.items() %}  
+    interface {{ loopback_name }}  
+    {%- for addr in addresses %}  
+        ip address {{ addr.ip }} {{ addr.mask }}  
+        {%- if addr.get('status') != 'primary' %}  
+            description Loopback Interface 
+        {%- else %}  
+            description Primary Loopback Interface
+        {%- endif %}  
+    {%- endfor %}  
+{%- endfor %}  
+!
+{#OSPF CONFIGS#}
+router ospf 1 
+   router-id {{ ospf_config.router_id }}  
+{% for network in ospf_config.networks %}  
+   network {{ network.network }} {{ network.mask }} area {{ ospf_config.area }}  
+{% endfor %}  
+{% for interface in ospf_config.passive %}  
+   passive-interface {{ interface }}  
+{% endfor %}  
+
+{# IP Routes#}
+{% for group_name, group in bgp_config['neighbors'].items() %}
+{% if group['type'] == 'external' and group.get('next_hop') %}
+ip route {{ group['peers'].keys()|first }} 255.255.255.255 {{ group['next_hop'] }}
+{% endif %}
+{% endfor %}
+
+
+{# EBGP static route filtering #}  
+{% set ebgp_neighbors = bgp_config.neighbors.values() | selectattr('type', 'equalto', 'external') | list %}  
+{% if ebgp_neighbors %}  
+{% set seq_num = 0 %}  
+{% for group in ebgp_neighbors %}  
+{% for peer_ip in group['peers'].keys() %}  
+ip prefix-list FILTER_EBGP_STATIC seq {{ seq_num + 5 }} deny {{ peer_ip }}/32  
+{% endfor %}  
+{% endfor %}  
+ip prefix-list FILTER_EBGP_STATIC seq 1000 permit 0.0.0.0/0 le 32  
+
+{% for group_name, group in bgp_config['neighbors'].items() %}  
+{% if group['type'] == 'external' %}  
+route-map FILTER_EBGP_STATIC permit 10  
+ match ip address prefix-list FILTER_EBGP_STATIC  
+{% endif %}  
+{% endfor %}  
+{% endif %}
+
+{# IBGP Route Filters Own ASN Prefixes #}
+{% if is_rr %}  
+{% for name, config in loopbacks.items() %}  
+ip prefix-list FILTER_LOOPBACKS seq {{ loop.index * 5 }} deny {{ config[0]['ip'].split('.')[0:3]|join('.') }}.0/24 ge 32  
+{% endfor %}  
+ip prefix-list FILTER_LOOPBACKS seq {{ (loopbacks|length + 1) * 5 }} permit 0.0.0.0/0 le 32  
+route-map OUTBOUND_FILTER permit 10  
+ match ip address prefix-list FILTER_LOOPBACKS  
+{% endif %}
+
+
+
+{# BGP RELATED CONFIG #}
+router bgp {{ local_as }}
+ router-id {{ router_id }}
+ bgp log-neighbor-changes
+{% if is_rr %}
+ bgp cluster-id {{ router_id }}
+{% endif %}
+
+{% for group_name, group in bgp_config['neighbors'].items() %}
+ neighbor {{ group_name }} peer group
+ neighbor {{ group_name }} remote-as {{ group['peer_as'] }}
+{% if group['type'] == 'internal' %}
+ neighbor {{ group_name }} update-source Loopback0
+ neighbor {{ group_name }} next-hop-self
+{% elif group['type'] == 'external' %}
+ neighbor {{ group_name }} ebgp-multihop
+ neighbor {{ group_name }} update-source Loopback0
+ neighbor {{ group_name }} route-map FILTER_EBGP_STATIC out
+{% endif %}
+{%- if is_rr  and group['type'] == 'internal' %}
+neighbor {{ group_name }} route-reflector-client
+neighbor {{ group_name }} route-map OUTBOUND_FILTER out
+{% endif %}
+{%- if not is_rr and group['type'] =='external' %}
+redistribute ospf
+{% endif %}
+
+{% for peer, peer_config in group['peers'].items() %}
+ neighbor {{ peer }} peer group {{ group_name }}
+ neighbor {{ peer }} description {{ peer_config['description'] }}
+{% endfor %}
+{% endfor %}
+
+{# THIS REDISTRIBUTION IS NEEDED IN ARISTA #}
+{# ONLY DO THIS IN RR #}
+{% if is_rr %}
+redistribute ospf
+redistribute static
+{% endif %}
+
+
+
+{# BGP ADDRESS FAMILY CONFIGS #}
+address-family ipv4
+{% for name, config in loopbacks.items() %}
+  network {{ config[0]['ip'] }} mask 255.255.255.255
+{% endfor %}
+{% for group_name, group in bgp_config['neighbors'].items() %}
+{% for peer in group['peers'] %}
+  neighbor {{ peer }} activate
+{% endfor %}
+{% endfor %}
+
+
+
+{# FINAL ENDIF #}
+{%- endif %}

@@ -1,0 +1,74 @@
+{%- set device_os = grains.get('os', '') %} 
+
+{%- if device_os == 'junos' %}  
+delete protocols ospf
+delete interfaces lo0
+delete system host-name
+delete system login message
+
+{# For Juniper, we need to be careful with interface em2 #}  
+{% if pillar.wan_config is defined %}  
+{% for interface, interface_config in pillar.wan_config.items() %}  
+{% if interface != 'em2' %}  
+delete interfaces {{ interface }}  
+{% endif %}  
+{% if interface == 'em2' %}  
+delete interfaces em2 mtu
+{% endif %}  
+{% endfor %}  
+{% endif %}  
+
+{# CISCO CONFIGS #}
+{%- elif device_os == 'ios' %}
+no router ospf 1
+no hostname
+no banner motd
+no interface loopback 0
+no interface loopback 1
+
+{# Remove WAN interfaces except GigabitEthernet0/2 #}  
+{% for interface in pillar['wan_config'] %}  
+{% if interface != 'GigabitEthernet0/2' %}  
+interface {{ interface }}  
+ no ip address  
+ no mtu  
+ no description  
+!  
+{% endif %}  
+{# For GigabitEthernet0/2, only remove MTU if it was set #}  
+{% if interface == 'GigabitEthernet0/2' %} 
+interface {{ interface }}   
+ no mtu 
+{% endif %}
+{% endfor %}
+
+{# Arisa CONFIGS #}
+{% elif device_os =='eos' %}
+
+{# Remove routing protocols #}  
+no router ospf 1  
+
+{# Remove device identity configurations #}  
+no hostname  
+no banner motd  
+
+{# Remove loopback interfaces #}  
+no interface loopback 0  
+no interface loopback 1  
+
+{# Reset WAN interfaces except management interface (Ethernet2) #}  
+{% for interface in pillar['wan_config'] %}  
+{% if interface != 'Ethernet2' %}  
+interface {{ interface }}  
+   default ip address  
+   default mtu  
+   no description  
+!  
+{% endif %}  
+{% if interface == 'Ethernet2' %}  
+interface {{ interface }}  
+   default mtu  
+{% endif %}
+{% endfor %}  
+
+{%- endif %}
