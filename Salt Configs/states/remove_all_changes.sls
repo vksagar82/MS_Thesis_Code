@@ -2,7 +2,7 @@
 
 remove_configurations:  
   netconfig.managed:  
-    - template_name: /etc/salt/templates/remove_all_config.j2  
+    - template_name: /etc/salt/templates/remove_all_changes.j2  
     - template_engine: jinja  
     - commit_in_isolation: True  
     - skip_verify: True  

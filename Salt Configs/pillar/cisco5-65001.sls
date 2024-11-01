@@ -9,8 +9,6 @@ proxy:
     global_delay_factor: 2  
     fast_cli: True
     read_timeout: 90
-    transport: 'netconf'
-    port: 830
 
 router_details:
   hostname: R5-65001
