@@ -216,7 +216,7 @@ def execute_automation_command(tool, state_name, devices):
         if tool == "Salt":
             cmd = f"sudo salt -L '{target_devices}' state.apply {state_name} -t 60000"
         else:  # Ansible
-            cmd = f"ansible-playbook -i inventory.yml {state_name}.yml --limit {target_devices}"
+            cmd = f"ansible-playbook -i hosts /etc/ansible/playbooks/{state_name}.yml --limit {target_devices}"
 
         print(f"\nExecuting command: {cmd}")
 
