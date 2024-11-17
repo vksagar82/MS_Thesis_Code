@@ -26,8 +26,10 @@ if not os.path.exists(RESULTS_DIR):
 # Define device configurations
 DEVICE_CONFIGS = {
     3: {'cisco': 1, 'arista': 1, 'juniper': 1},
+    6: {'cisco': 2, 'arista': 2, 'juniper': 2},
     12: {'cisco': 4, 'arista': 4, 'juniper': 4},
     18: {'cisco': 6, 'arista': 6, 'juniper': 6},
+    24: {'cisco': 8, 'arista': 8, 'juniper': 8},
     30: {'cisco': 10, 'arista': 10, 'juniper': 10}
 }
 
@@ -109,16 +111,18 @@ def get_device_count():
     while True:
         print("\nAvailable device configurations:")
         print("1. 3 devices (1 each of Cisco, Arista, Juniper)")
-        print("2. 12 devices (4 each of Cisco, Arista, Juniper)")
-        print("3. 18 devices (6 each of Cisco, Arista, Juniper)")
-        print("4. All 30 devices (10 each of Cisco, Arista, Juniper)")
+        print("2. 6 devices (2 each of Cisco, Arista, Juniper)")
+        print("3. 12 devices (4 each of Cisco, Arista, Juniper)")
+        print("4. 18 devices (6 each of Cisco, Arista, Juniper)")
+        print("5. 24 devices (8 each of Cisco, Arista, Juniper)")
+        print("6. 30 devices (10 each of Cisco, Arista, Juniper)")
 
         try:
-            choice = int(input("\nSelect configuration (1-4): "))
-            device_counts = {1: 3, 2: 12, 3: 18, 4: 30}
+            choice = int(input("\nSelect configuration (1-6): "))
+            device_counts = {1: 3, 2: 6, 3: 12, 4: 18, 5: 24, 6: 30}
             if choice in device_counts:
                 return device_counts[choice]
-            print("Please enter a number between 1 and 4")
+            print("Please enter a number between 1 and 6")
         except ValueError:
             print("Please enter a valid number")
 
